@@ -5,15 +5,28 @@ public class QuadtreeExample : MonoBehaviour
 {
     // Add GameObjects as children of this one in the editor to test (move them on the X-Y plane, keep Z as zero)
     [SerializeField] private Transform testObjectParent;
-    [Min(1)] [SerializeField] private int maxObjectsPerNode = 2;
-    [Min(0)] [SerializeField] private int maxDepth = 5;
-    [SerializeField] private Vector2 quadtreeSize = new Vector2(100,100);
+
+    [Tooltip("How many objects must be in a node before it is split (ignored if maxDepth is reached)")]
+    [Range(1f,10f)] [SerializeField] private int maxObjectsPerNode = 2;
+
+    [Tooltip("Prevents the algorithm from becoming too expensive by limiting the smallest split that can be performed")]
+    [Range(0f,25f)] [SerializeField] private int maxDepth = 5;
+
+    [Min(1f)] [SerializeField] float quadtreeWidth = 100f;
+    [Min(1f)] [SerializeField] float quadtreeHeight = 100f;
+    private Vector2 quadtreeSize;
+
     [SerializeField] private GameObject canvasPrefab;
     [SerializeField] private GameObject visualRectPrefab;
+
+    [Tooltip("Show a visual of the quadtree, useful for debugging")]
     [SerializeField] private bool displayQuadtreeBounds = true;
 
     private void Start()
     {
+        // The width and height are set separately to enforce minimum values in the inspector
+        quadtreeSize = new Vector2(quadtreeWidth, quadtreeHeight);
+
         // Instantiate a new quadtree, set the size to quadTreeSize, carrying over
         // maxObjectsPerNode and maxDepth from serialized variables set in the editor
         Quadtree myQuadtree = new Quadtree(new Rect(Vector2.zero, quadtreeSize), maxObjectsPerNode, maxDepth);
@@ -27,7 +40,10 @@ public class QuadtreeExample : MonoBehaviour
 
         myQuadtree.Retrieve();
 
-        if (displayQuadtreeBounds) DrawQuadtreeToCanvas(myQuadtree.root);
+        if (displayQuadtreeBounds)
+        {
+            DrawQuadtreeToCanvas(myQuadtree.root);
+        }
     }
 
     // Don't worry about this, just auto-centres camera regardless of quadtree size, making
@@ -74,8 +90,8 @@ public class QuadtreeExample : MonoBehaviour
         Canvas canvas = Instantiate(canvasPrefab).GetComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
         RectTransform canvasRectTransform = canvas.GetComponent<RectTransform>();
-        canvasRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, quadtreeSize.x);
-        canvasRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, quadtreeSize.y);
+        canvasRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, node.bounds.width);
+        canvasRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, node.bounds.height);
         DrawQuadtreeToCanvas(node, canvas.transform);
     }
 }
@@ -108,15 +124,15 @@ public class Quadtree
     }
 
     // Returns a bool which indicates whether the object could be inserted into the quadtree
-    // at the specified node - this function calls itself recurssively, so it mostly uses this 
-    // bool for its own benefit, to know if any of its subproccesses have succeeded so that
+    // at the specified node - this function calls itself recursively, so it mostly uses this 
+    // bool for its own benefit, to know if any of its subproccesses have succeeded, so that
     // it can stop iterating through the list of children
     public bool Insert(GameObject gameObject, QuadtreeNode node, int currentDepth)
     {
         // If the given GameObject is not contained within the given node, return false
         if (!node.bounds.Contains(gameObject.transform.position)) { return false; }
 
-        // If the given node has children, run this function recurssively on each child
+        // If the given node has children, run this function recursively on each child
         // until one of them returns true, in which case this function should also return true
         if (node.children.Length > 0)
         {
@@ -131,8 +147,8 @@ public class Quadtree
         }
 
         // If the given node is already at the limit for the objects it can contain, split the
-        // node into 4 children, and try to run this function on it again (now that it has 4
-        // children, the previous if statement will be triggered instead)
+        // node into 4 children, and try to run this function on the same node again (now that it 
+        // has 4 children, the previous if statement will be triggered instead)
         if (node.objects.Count >= maxObjectsPerNode && currentDepth < maxDepth)
         {
             node.Split();

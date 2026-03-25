@@ -463,13 +463,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 244418737}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.40821788, y: -0.23456968, z: 0.10938163, w: 0.8754261}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 3, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 50, y: -30, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &244418740
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -535,8 +535,8 @@ Camera:
   m_GameObject: {fileID: 327409840}
   m_Enabled: 1
   serializedVersion: 2
-  m_ClearFlags: 1
-  m_BackGroundColor: {r: 0.19215687, g: 0.3019608, b: 0.4745098, a: 0}
+  m_ClearFlags: 2
+  m_BackGroundColor: {r: 0.13216448, g: 0.160433, b: 0.20754719, a: 0}
   m_projectionMatrixMode: 1
   m_GateFitMode: 2
   m_FOVAxisMode: 0
@@ -1907,7 +1907,8 @@ MonoBehaviour:
   testObjectParent: {fileID: 669711890}
   maxObjectsPerNode: 2
   maxDepth: 10
-  quadtreeSize: {x: 100, y: 100}
+  quadtreeWidth: 100
+  quadtreeHeight: 100
   canvasPrefab: {fileID: 6717394317585342311, guid: 483ca13da64ce904992045449fd91873, type: 3}
   visualRectPrefab: {fileID: 912226746907477783, guid: e89713fcd78613546923b4da6d5221f1, type: 3}
   displayQuadtreeBounds: 1
