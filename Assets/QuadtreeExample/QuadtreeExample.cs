@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
 
 public class QuadtreeExample : MonoBehaviour
@@ -22,7 +23,7 @@ public class QuadtreeExample : MonoBehaviour
     [Tooltip("Show a visual of the quadtree, useful for debugging")]
     [SerializeField] private bool displayQuadtreeBounds = true;
 
-    private void Start()
+    private async void Start()
     {
         // The width and height are set separately to enforce minimum values in the inspector
         quadtreeSize = new Vector2(quadtreeWidth, quadtreeHeight);
@@ -33,16 +34,30 @@ public class QuadtreeExample : MonoBehaviour
         
         CentreCameraOnQuadtree(myQuadtree);
 
+        float timeA = Time.time;
         for (int i = 0; i < testObjectParent.childCount; i++)
         {
-            myQuadtree.Insert(testObjectParent.GetChild(i).gameObject);
+            await myQuadtree.Insert(testObjectParent.GetChild(i).gameObject);
         }
+        float timeB = Time.time;
 
-        myQuadtree.Retrieve();
+        Debug.Log($"Took {timeB - timeA} seconds to insert all objects into quadtree!");
+
+        /*
+        timeA = Time.time;
+        await myQuadtree.Retrieve();
+        timeB = Time.time;
+
+        Debug.Log($"Took {timeB - timeA} seconds to retrieve the quadtree!");
+        */
 
         if (displayQuadtreeBounds)
         {
-            DrawQuadtreeToCanvas(myQuadtree.root);
+            timeA = Time.time;
+            await DrawQuadtreeToCanvas(myQuadtree.root);
+            timeB = Time.time;
+    
+            Debug.Log($"Took {timeB - timeA} seconds to draw the quadtree to the canvas!");
         }
     }
 
@@ -68,8 +83,8 @@ public class QuadtreeExample : MonoBehaviour
 
     // Create a visual representation of the given node, then go through each of the children
     // of this node and do the same for them (goes down the tree recursively by calling itself)
-    private void DrawQuadtreeToCanvas(QuadtreeNode node, Transform parentTransform)
-    {     
+    private async Task DrawQuadtreeToCanvas(QuadtreeNode node, Transform parentTransform)
+    {
         GameObject visualRect;
         visualRect = Instantiate(visualRectPrefab, parentTransform);
         visualRect.transform.position = node.bounds.position;
@@ -79,20 +94,21 @@ public class QuadtreeExample : MonoBehaviour
         
         foreach (QuadtreeNode child in node.children)
         {
-            DrawQuadtreeToCanvas(child, visualRect.transform);
+            await DrawQuadtreeToCanvas(child, visualRect.transform);
+            await Task.Yield();
         }
     }
 
     // If the function is called without a parentTransform argument, then a canvas is initialised
     // and is used as the root of the tree for the visual elements to show the quadtree bounds
-    private void DrawQuadtreeToCanvas(QuadtreeNode node)
+    private async Task DrawQuadtreeToCanvas(QuadtreeNode node)
     {
         Canvas canvas = Instantiate(canvasPrefab).GetComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
         RectTransform canvasRectTransform = canvas.GetComponent<RectTransform>();
         canvasRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, node.bounds.width);
         canvasRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, node.bounds.height);
-        DrawQuadtreeToCanvas(node, canvas.transform);
+        await DrawQuadtreeToCanvas(node, canvas.transform);
     }
 }
 
@@ -127,7 +143,7 @@ public class Quadtree
     // at the specified node - this function calls itself recursively, so it mostly uses this 
     // bool for its own benefit, to know if any of its subproccesses have succeeded, so that
     // it can stop iterating through the list of children
-    public bool Insert(GameObject gameObject, QuadtreeNode node, int currentDepth)
+    public async Task<bool> Insert(GameObject gameObject, QuadtreeNode node, int currentDepth)
     {
         // If the given GameObject is not contained within the given node, return false
         if (!node.bounds.Contains(gameObject.transform.position)) { return false; }
@@ -138,7 +154,7 @@ public class Quadtree
         {
             foreach (QuadtreeNode child in node.children)
             {
-                if (Insert(gameObject, child, currentDepth + 1))
+                if (await Insert(gameObject, child, currentDepth + 1))
                 {
                     return true;
                 }
@@ -152,24 +168,25 @@ public class Quadtree
         if (node.objects.Count >= maxObjectsPerNode && currentDepth < maxDepth)
         {
             node.Split();
-            return Insert(gameObject, node, currentDepth);
+            return await Insert(gameObject, node, currentDepth);
         }
 
         // If the current node has 0 child nodes, has room for 1 more object, and the given object
         // overlaps with its bounds, then the object is added to the nodes 'objects' list
         node.objects.Add(gameObject);
+        await Task.Yield();
         return true;
     }
 
     // If Insert() is called without specifying a node, then the root node will be used
-    public bool Insert(GameObject gameObject)
+    public async Task<bool> Insert(GameObject gameObject)
     {
-        return Insert(gameObject, root, 0);
+        return await Insert(gameObject, root, 0);
     }
 
     // Returns a list of every single object through the entire node tree, descending
     // from the the specified node (only cares about this node and its children, grandchildren, etc.)
-    public List<GameObject> Retrieve(QuadtreeNode node)
+    public async Task<List<GameObject>> Retrieve(QuadtreeNode node)
     {
         List<GameObject> retrievedObjects = new List<GameObject>();
 
@@ -181,7 +198,7 @@ public class Quadtree
         // object from every child descending from this node, and add each object retrieved to the list
         foreach (QuadtreeNode child in node.children)
         {
-            foreach (GameObject currentObject in Retrieve(child))
+            foreach (GameObject currentObject in await Retrieve(child))
             {
                 retrievedObjects.Add(currentObject);
             }
@@ -192,16 +209,17 @@ public class Quadtree
         foreach (GameObject currentObject in node.objects)
         {
             retrievedObjects.Add(currentObject);
-            Debug.Log($"{currentObject} is in node at pos {node.bounds.position}");
+            // Debug.Log($"{currentObject} is in node at pos {node.bounds.position}");
         }
 
+        await Task.Yield();
         return retrievedObjects;
     }
 
     // If Retrieve() is called without specifying a node, the root node is used
-    public List<GameObject> Retrieve()
+    public async Task<List<GameObject>> Retrieve()
     {
-        return Retrieve(root);
+        return await Retrieve(root);
     }
 }
 
@@ -216,7 +234,7 @@ public class QuadtreeNode
     public QuadtreeNode[] children = new QuadtreeNode[0];
 
     // Splits this node into 4 child nodes
-    public QuadtreeNode[] Split()
+    public void Split()
     {
         // Array of nodes with length of 4
         QuadtreeNode[] newChildren = new QuadtreeNode[4];
@@ -269,7 +287,5 @@ public class QuadtreeNode
         // Sets this nodes objects list to be empty. Leaving it populated could lead
         // to duplicates after just adding all of its contents to the new child nodes
         objects = new List<GameObject>();
-
-        return children;
     }
 }
