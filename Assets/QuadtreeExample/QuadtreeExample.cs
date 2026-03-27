@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using UnityEngine;
 
 public class QuadtreeExample : MonoBehaviour
@@ -23,7 +22,14 @@ public class QuadtreeExample : MonoBehaviour
     [Tooltip("Show a visual of the quadtree, useful for debugging")]
     [SerializeField] private bool displayQuadtreeBounds = true;
 
-    private async void Start()
+    private void Start()
+    {
+        InitialiseQuadtree();
+
+        Debug.Log("Start() done");
+    }
+
+    private async void InitialiseQuadtree()
     {
         // The width and height are set separately to enforce minimum values in the inspector
         quadtreeSize = new Vector2(quadtreeWidth, quadtreeHeight);
@@ -41,24 +47,28 @@ public class QuadtreeExample : MonoBehaviour
         }
         float timeB = Time.time;
 
-        Debug.Log($"Took {timeB - timeA} seconds to insert all objects into quadtree!");
+        Debug.Log($"Took {timeB - timeA} seconds to insert {testObjectParent.childCount} objects into the quadtree!");
 
         /*
+        float timeA = Time.time;
+        await myQuadtree.RetrieveObjects();
+        float timeB = Time.time;
+
+        Debug.Log($"Took {timeB - timeA} seconds to retrieve all objects from the quadtree!");
+
         timeA = Time.time;
-        await myQuadtree.Retrieve();
+        List<QuadtreeNode> myQuadtreeNodes = await myQuadtree.RetrieveNodes();
         timeB = Time.time;
 
-        Debug.Log($"Took {timeB - timeA} seconds to retrieve the quadtree!");
+        Debug.Log($"Took {timeB - timeA} seconds to retrieve all nodes from the quadtree!");
         */
 
         if (displayQuadtreeBounds)
         {
-            timeA = Time.time;
-            await DrawQuadtreeToCanvas(myQuadtree.root);
-            timeB = Time.time;
-    
-            Debug.Log($"Took {timeB - timeA} seconds to draw the quadtree to the canvas!");
+            DrawQuadtreeToCanvas(myQuadtree);
         }
+
+        Debug.Log("InitialiseQuadtree() done");
     }
 
     // Don't worry about this, just auto-centres camera regardless of quadtree size, making
@@ -81,34 +91,36 @@ public class QuadtreeExample : MonoBehaviour
         }
     }
 
-    // Create a visual representation of the given node, then go through each of the children
-    // of this node and do the same for them (goes down the tree recursively by calling itself)
-    private async Task DrawQuadtreeToCanvas(QuadtreeNode node, Transform parentTransform)
+    // Creates a visual representation of the given node
+    private void DrawQuadtreeNodeToCanvas(QuadtreeNode node, Transform parentTransform)
     {
-        GameObject visualRect;
-        visualRect = Instantiate(visualRectPrefab, parentTransform);
-        visualRect.transform.position = node.bounds.position;
+        GameObject visualRect = Instantiate(visualRectPrefab, parentTransform);
         RectTransform visualRectTransform = visualRect.GetComponent<RectTransform>();
         visualRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, node.bounds.width);
         visualRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, node.bounds.height);
-        
-        foreach (QuadtreeNode child in node.children)
-        {
-            await DrawQuadtreeToCanvas(child, visualRect.transform);
-            await Task.Yield();
-        }
+        visualRect.transform.position = (Vector3)node.bounds.position + new Vector3(0,0,-1f/visualRectTransform.sizeDelta.magnitude);
     }
 
-    // If the function is called without a parentTransform argument, then a canvas is initialised
-    // and is used as the root of the tree for the visual elements to show the quadtree bounds
-    private async Task DrawQuadtreeToCanvas(QuadtreeNode node)
+    // A canvas is initialised with the size of the quadtree's root node,
+    // and is used as the root for the visual elements to show the quadtree bounds
+    private async void DrawQuadtreeToCanvas(Quadtree quadtree)
     {
+        float startTime = Time.time;
+
         Canvas canvas = Instantiate(canvasPrefab).GetComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
         RectTransform canvasRectTransform = canvas.GetComponent<RectTransform>();
-        canvasRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, node.bounds.width);
-        canvasRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, node.bounds.height);
-        await DrawQuadtreeToCanvas(node, canvas.transform);
+        canvasRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, quadtree.root.bounds.width);
+        canvasRectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, quadtree.root.bounds.height);
+
+        List<QuadtreeNode> nodesList = await quadtree.RetrieveNodes();
+
+        foreach (QuadtreeNode node in nodesList)
+        {
+            DrawQuadtreeNodeToCanvas(node, canvas.transform);
+        }
+
+        Debug.Log($"Took {Time.time - startTime} seconds to render {nodesList.Count} nodes to canvas!");
     }
 }
 
@@ -128,11 +140,9 @@ public class Quadtree
     // and a rect value for the size that the root node should be
     public Quadtree(Rect rootNodeBounds, int maxObjectsPerNode, int maxDepth)
     {
-        root = new QuadtreeNode()
+        root = new QuadtreeNode
         {
-            bounds = rootNodeBounds,
-            children = new QuadtreeNode[0],
-            objects = new List<GameObject>()
+            bounds = rootNodeBounds
         };
 
         this.maxObjectsPerNode = maxObjectsPerNode;
@@ -143,7 +153,7 @@ public class Quadtree
     // at the specified node - this function calls itself recursively, so it mostly uses this 
     // bool for its own benefit, to know if any of its subproccesses have succeeded, so that
     // it can stop iterating through the list of children
-    public async Task<bool> Insert(GameObject gameObject, QuadtreeNode node, int currentDepth)
+    public async Awaitable<bool> Insert(GameObject gameObject, QuadtreeNode node, int currentDepth)
     {
         // If the given GameObject is not contained within the given node, return false
         if (!node.bounds.Contains(gameObject.transform.position)) { return false; }
@@ -167,27 +177,29 @@ public class Quadtree
         // has 4 children, the previous if statement will be triggered instead)
         if (node.objects.Count >= maxObjectsPerNode && currentDepth < maxDepth)
         {
-            node.Split();
+            await node.Split();
             return await Insert(gameObject, node, currentDepth);
         }
 
         // If the current node has 0 child nodes, has room for 1 more object, and the given object
         // overlaps with its bounds, then the object is added to the nodes 'objects' list
         node.objects.Add(gameObject);
-        await Task.Yield();
+
         return true;
     }
 
     // If Insert() is called without specifying a node, then the root node will be used
-    public async Task<bool> Insert(GameObject gameObject)
+    public async Awaitable Insert(GameObject gameObject)
     {
-        return await Insert(gameObject, root, 0);
+        await Insert(gameObject, root, 0);
     }
 
     // Returns a list of every single object through the entire node tree, descending
     // from the the specified node (only cares about this node and its children, grandchildren, etc.)
-    public async Task<List<GameObject>> Retrieve(QuadtreeNode node)
+    public async Awaitable<List<GameObject>> RetrieveObjects(QuadtreeNode node)
     {
+        await Awaitable.BackgroundThreadAsync();
+
         List<GameObject> retrievedObjects = new List<GameObject>();
 
         // If the given node doesn't overlap at all with the root node, return the list empty because
@@ -198,7 +210,7 @@ public class Quadtree
         // object from every child descending from this node, and add each object retrieved to the list
         foreach (QuadtreeNode child in node.children)
         {
-            foreach (GameObject currentObject in await Retrieve(child))
+            foreach (GameObject currentObject in await RetrieveObjects(child))
             {
                 retrievedObjects.Add(currentObject);
             }
@@ -212,14 +224,38 @@ public class Quadtree
             // Debug.Log($"{currentObject} is in node at pos {node.bounds.position}");
         }
 
-        await Task.Yield();
         return retrievedObjects;
     }
 
     // If Retrieve() is called without specifying a node, the root node is used
-    public async Task<List<GameObject>> Retrieve()
+    public async Awaitable<List<GameObject>> RetrieveObjects()
     {
-        return await Retrieve(root);
+        return await RetrieveObjects(root);
+    }
+
+    public async Awaitable<List<QuadtreeNode>> RetrieveNodes(QuadtreeNode node)
+    {
+        await Awaitable.BackgroundThreadAsync();
+
+        List<QuadtreeNode> retrievedNodes = new List<QuadtreeNode>();
+
+        if (!node.bounds.Overlaps(root.bounds)) { return retrievedNodes; }
+
+        foreach (QuadtreeNode child in node.children)
+        {
+            foreach (QuadtreeNode descendantNode in await RetrieveNodes(child))
+            {
+                retrievedNodes.Add(descendantNode);
+            }
+            retrievedNodes.Add(child);
+        }
+
+        return retrievedNodes;
+    }
+
+    public async Awaitable<List<QuadtreeNode>> RetrieveNodes()
+    {
+        return await RetrieveNodes(root);
     }
 }
 
@@ -234,8 +270,10 @@ public class QuadtreeNode
     public QuadtreeNode[] children = new QuadtreeNode[0];
 
     // Splits this node into 4 child nodes
-    public void Split()
+    public async Awaitable Split()
     {
+        await Awaitable.BackgroundThreadAsync();
+
         // Array of nodes with length of 4
         QuadtreeNode[] newChildren = new QuadtreeNode[4];
         // Creates 4 children, and adds each one to the array
@@ -269,6 +307,8 @@ public class QuadtreeNode
         
         // Overwrites the array of length 0 stored in 'children' previously with a populated array of length 4
         children = newChildren;
+
+        await Awaitable.MainThreadAsync();
 
         // For each object this node contains, check against each new child for which one it should be sent to
         foreach (GameObject gameObject in objects)
