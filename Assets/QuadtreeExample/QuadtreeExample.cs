@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 
 public class QuadtreeExample : MonoBehaviour
@@ -153,7 +154,7 @@ public class Quadtree
     // at the specified node - this function calls itself recursively, so it mostly uses this 
     // bool for its own benefit, to know if any of its subproccesses have succeeded, so that
     // it can stop iterating through the list of children
-    public async Awaitable<bool> Insert(GameObject gameObject, QuadtreeNode node, int currentDepth)
+    public async UniTask<bool> Insert(GameObject gameObject, QuadtreeNode node, int currentDepth)
     {
         // If the given GameObject is not contained within the given node, return false
         if (!node.bounds.Contains(gameObject.transform.position)) { return false; }
@@ -189,16 +190,16 @@ public class Quadtree
     }
 
     // If Insert() is called without specifying a node, then the root node will be used
-    public async Awaitable Insert(GameObject gameObject)
+    public async UniTask Insert(GameObject gameObject)
     {
         await Insert(gameObject, root, 0);
     }
 
     // Returns a list of every single object through the entire node tree, descending
     // from the the specified node (only cares about this node and its children, grandchildren, etc.)
-    public async Awaitable<List<GameObject>> RetrieveObjects(QuadtreeNode node)
+    public async UniTask<List<GameObject>> RetrieveObjects(QuadtreeNode node)
     {
-        await Awaitable.BackgroundThreadAsync();
+        await UniTask.SwitchToThreadPool();
 
         List<GameObject> retrievedObjects = new List<GameObject>();
 
@@ -228,14 +229,14 @@ public class Quadtree
     }
 
     // If Retrieve() is called without specifying a node, the root node is used
-    public async Awaitable<List<GameObject>> RetrieveObjects()
+    public async UniTask<List<GameObject>> RetrieveObjects()
     {
         return await RetrieveObjects(root);
     }
 
-    public async Awaitable<List<QuadtreeNode>> RetrieveNodes(QuadtreeNode node)
+    public async UniTask<List<QuadtreeNode>> RetrieveNodes(QuadtreeNode node)
     {
-        await Awaitable.BackgroundThreadAsync();
+        await UniTask.SwitchToThreadPool();
 
         List<QuadtreeNode> retrievedNodes = new List<QuadtreeNode>();
 
@@ -250,10 +251,12 @@ public class Quadtree
             retrievedNodes.Add(child);
         }
 
+        await UniTask.SwitchToMainThread();
+
         return retrievedNodes;
     }
 
-    public async Awaitable<List<QuadtreeNode>> RetrieveNodes()
+    public async UniTask<List<QuadtreeNode>> RetrieveNodes()
     {
         return await RetrieveNodes(root);
     }
@@ -270,9 +273,9 @@ public class QuadtreeNode
     public QuadtreeNode[] children = new QuadtreeNode[0];
 
     // Splits this node into 4 child nodes
-    public async Awaitable Split()
+    public async UniTask Split()
     {
-        await Awaitable.BackgroundThreadAsync();
+        await UniTask.SwitchToThreadPool();
 
         // Array of nodes with length of 4
         QuadtreeNode[] newChildren = new QuadtreeNode[4];
@@ -308,7 +311,7 @@ public class QuadtreeNode
         // Overwrites the array of length 0 stored in 'children' previously with a populated array of length 4
         children = newChildren;
 
-        await Awaitable.MainThreadAsync();
+        await UniTask.SwitchToMainThread();
 
         // For each object this node contains, check against each new child for which one it should be sent to
         foreach (GameObject gameObject in objects)
